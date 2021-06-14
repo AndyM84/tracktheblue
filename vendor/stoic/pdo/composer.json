@@ -1,0 +1,21 @@
+{
+	"name": "stoic/pdo",
+	"description": "PDO helper components for the Stoic framework",
+	"version": "1.0.8",
+	"homepage": "https://stoic-framework.com",
+	"autoload": {
+		"classmap": ["Pdo/"],
+		"exclude-from-classmap": [
+			"./Tests/"
+		]
+	},
+	"require": {
+		"php": ">=7.4",
+		"stoic/stoic": "^1.0",
+		"stoic/io": "^1.0"
+	},
+	"require-dev": {
+		"phpunit/phpunit": "^9",
+		"jimbojsb/pseudo": "^0.4"
+	}
+}

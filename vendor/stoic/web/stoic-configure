@@ -1,0 +1,186 @@
+#!/usr/bin/env php
+<?php
+
+	if (version_compare('7.2.0', PHP_VERSION, '>')) {
+		fwrite(STDERR, sprintf("Stoic is only supported on versions of PHP 7.2 or newer." . PHP_EOL . "You are using PHP %s (%s)" . PHP_EOL, PHP_VERSION, PHP_BINARY));
+
+		die(1);
+	}
+
+	if (!ini_get('date.timezone')) {
+		ini_set('date.timezone', 'UTC');
+	}
+
+	foreach (['../../' => '../../', '../vendor/' => '../', 'vendor/' => './'] as $file => $relPath) {
+		$path = "{$file}autoload.php";
+
+		if (file_exists($path)) {
+			define('STOIC_COMPOSER_INSTALL', $path);
+			define('STOIC_COMPOSER_PARENT', $relPath);
+
+			break;
+		}
+	}
+
+	if (!defined('STOIC_COMPOSER_INSTALL')) {
+		fwrite(STDERR, "You need to set up the project dependencies using Composer:" . PHP_EOL . PHP_EOL . "    composer install" . PHP_EOL);
+
+		die(1);
+	}
+
+	require(STOIC_COMPOSER_INSTALL);
+
+	use AndyM84\Config\ConfigContainer;
+	use AndyM84\Config\Migrator;
+
+	use Stoic\Utilities\ConsoleHelper;
+	use Stoic\Utilities\FileHelper;
+	use Stoic\Web\Resources\SettingsStrings;
+	use Stoic\Web\Resources\StoicStrings;
+
+	// Script constants
+	define('SCRIPT_NAME',        'Stoic Framework Configuration Utility');
+	define('SCRIPT_DESCRIPTION', 'Script that provides ways to interactively (or non-interactively) configure a site\'s siteSettings.json file settings');
+	define('SCRIPT_USAGE',       '    vendor/bin/stoic-configure // Runs script interactively\n    vendor/bin/stoic-configure -PdbUser=test // Changes only the dbUser setting value');
+
+	/**
+	 * Attempts to query a CLI user for a value.
+	 *
+	 * @param ConsoleHelper $ch ConsoleHelper instance to use for communicating with user.
+	 * @param string $fieldName Name of the field to ask for value from user.
+	 * @param mixed $defaultValue Default value of field if no or incorrect input received from user.
+	 * @param \AndyM84\Config\FieldTypes $type Type of the field whose value is being requested.
+	 * @return mixed
+	 */
+	function queryForValue(ConsoleHelper $ch, $fieldName, $defaultValue, \AndyM84\Config\FieldTypes $type) {
+		$ret = null;
+		$validationFunc = function ($input) { return true; };
+		$sanitationFunc = function ($input) { return trim($input); };
+
+		switch ($type->getValue()) {
+			case \AndyM84\Config\FieldTypes::INTEGER:
+			case \AndyM84\Config\FieldTypes::FLOAT:
+				$validationFunc = function ($input) { return is_numeric($input); };
+
+				break;
+			case \AndyM84\Config\FieldTypes::STRING:
+				$validationFunc = function ($input) { return is_string($input); };
+
+				break;
+			case \AndyM84\Config\FieldTypes::BOOLEAN:
+				$validationFunc = function ($input) { return strtolower($input) == 'y' || strtolower($input) == 'n'; };
+				$sanitationFunc = function ($input) { return strtolower($input) == 'y' ? true : false; };
+
+				break;
+		}
+
+		$query = "Value for '{$fieldName}'";
+
+		if ($type->is(\AndyM84\Config\FieldTypes::BOOLEAN)) {
+			$query .= " (Y/n)";
+			$defaultValue = ($defaultValue) ? 'Y' : 'N';
+		}
+
+		$ret = $ch->getQueriedInput($query, $defaultValue, "Invalid value for '{$fieldName}'", 5, $validationFunc, $sanitationFunc);
+
+		if ($ret->isGood()) {
+			return $ret->getResults()[0];
+		}
+
+		return null;
+	}
+
+	$ch = new ConsoleHelper($argv);
+	$fh = new FileHelper(STOIC_COMPOSER_PARENT);
+
+	if ($ch->hasShortLongArg('h', 'help', true)) {
+		$ch->putLine(SCRIPT_NAME);
+		$ch->putLine(SCRIPT_DESCRIPTION);
+		$ch->putLine();
+		$ch->putLine(SCRIPT_USAGE);
+		$ch->putLine();
+
+		exit;
+	}
+
+	if (!$fh->fileExists(StoicStrings::SETTINGS_FILE_PATH)) {
+		fwrite(STDERR, "You must initialize your application:" . PHP_EOL . PHP_EOL . "    vendor/bin/stoic-create" . PHP_EOL);
+
+		die(1);
+	}
+
+	$settings = new ConfigContainer($fh->getContents(StoicStrings::SETTINGS_FILE_PATH));
+
+	$ch->putLine(SCRIPT_NAME);
+	$ch->putLine();
+	$ch->put("Performing configuration migration.. ");
+
+	$cfgHelper = new Migrator($fh->pathJoin($settings->get(SettingsStrings::ASSETS_PATH), $settings->get(SettingsStrings::MIGRATE_CFG_PATH)));
+	$cfgHelper->migrate();
+
+	$ch->putLine("DONE");
+	$ch->putLine();
+
+	$settings = new ConfigContainer($fh->getContents(StoicStrings::SETTINGS_FILE_PATH));
+	$cfgSchema = $settings->getSchema();
+	
+	$propsToSet = [];
+	$isInteractive = true;
+	$params = $ch->parameters(true, true);
+
+	foreach ($params as $param => $value) {
+		if ($param[0] == 'P') {
+			$isInteractive = false;
+
+			if ($param == 'PconfigVersion') {
+				continue;
+			}
+
+			$propsToSet[substr($param, 1)] = $value;
+		}
+	}
+
+	$ch->putLine(SCRIPT_NAME);
+	$ch->putLine();
+
+	if (!$isInteractive) {
+		if (count($propsToSet) < 1) {
+			$ch->putLine("No valid properties given to script, nothing to do..");
+
+			exit;
+		}
+
+		foreach ($propsToSet as $prop => $val) {
+			$ch->put("Attempting to set '{$prop}' value to '{$val}'.. ");
+
+			if (!$settings->has($prop)) {
+				$ch->putLine("ERROR - Property wasn't found in settings file");
+
+				continue;
+			}
+
+			$settings->set($prop, $val);
+			$ch->putLine("DONE");
+		}
+	} else {
+		foreach ($cfgSchema as $prop => $type) {
+			if ($prop == 'configVersion') {
+				continue;
+			}
+
+			$ret = queryForValue($ch, $prop, $settings->get($prop), $type);
+
+			if ($ret !== null) {
+				$settings->set($prop, $ret);
+			}
+		}
+	}
+
+	$ch->putLine();
+	$ch->put("Writing settings to disk.. ");
+
+	$fh->putContents(StoicStrings::SETTINGS_FILE_PATH, json_encode($settings, JSON_PRETTY_PRINT));
+	$ch->putLine("DONE");
+
+	$ch->putLine();
+	$ch->putLine("Stoic configuration complete.");

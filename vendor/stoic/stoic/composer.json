@@ -1,0 +1,31 @@
+{
+	"name": "stoic/stoic",
+	"description": "Stoic framework Core component",
+	"version": "1.0.2",
+	"homepage": "https://stoic-framework.com",
+	"autoload": {
+		"psr-0": {
+			"Stoic\\Chain\\": "./Chain",
+			"Stoic\\Log\\":  "./Log",
+			"Stoic\\Utilities\\":  "./Utilities"
+		},
+		"psr-4": {
+			"Stoic\\Chain\\": "./Chain",
+			"Stoic\\Log\\": "./Log",
+			"Stoic\\Utilities\\":  "./Utilities"
+		},
+		"exclude-from-classmap": [
+			"./Tests/"
+		]
+	},
+	"require": {
+		"php": ">=7.4",
+		"psr/log": "^1.0.0"
+	},
+	"require-dev": {
+		"phpunit/phpunit": "^9"
+	},
+	"provide": {
+		"psr/log-implementation": "1.0.0"
+	}
+}

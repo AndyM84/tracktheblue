@@ -1,0 +1,277 @@
+#!/usr/bin/env php
+<?php
+
+	if (version_compare('7.2.0', PHP_VERSION, '>')) {
+		fwrite(STDERR, sprintf("Stoic is only supported on versions of PHP 7.2 or newer." . PHP_EOL . "You are using PHP %s (%s)" . PHP_EOL, PHP_VERSION, PHP_BINARY));
+
+		die(1);
+	}
+
+	if (!ini_get('date.timezone')) {
+		ini_set('date.timezone', 'UTC');
+	}
+
+	error_reporting(E_ALL);
+	ini_set('display_errors', 'On');
+
+	foreach (['../../' => '../../', '../vendor/' => '../', 'vendor/' => './'] as $file => $relPath) {
+		$path = "{$file}autoload.php";
+
+		if (file_exists($path)) {
+			define('STOIC_COMPOSER_INSTALL', $path);
+			define('STOIC_COMPOSER_PARENT', $relPath);
+
+			break;
+		}
+	}
+
+	if (!defined('STOIC_COMPOSER_INSTALL')) {
+		fwrite(STDERR, "You need to set up the project dependencies using Composer:" . PHP_EOL . PHP_EOL . "    composer install" . PHP_EOL);
+
+		die(1);
+	}
+
+	require(STOIC_COMPOSER_INSTALL);
+
+	use AndyM84\Config\ConfigContainer;
+	use AndyM84\Config\Migrator;
+
+	use Stoic\Pdo\PdoDrivers;
+	use Stoic\Pdo\PdoHelper;
+	use Stoic\Utilities\ConsoleHelper;
+	use Stoic\Utilities\FileHelper;
+	use Stoic\Web\Resources\SettingsStrings;
+	use Stoic\Web\Resources\StoicStrings;
+
+	// Script constants
+	define('SCRIPT_NAME',        'Stoic Framework Migration Utility');
+	define('SCRIPT_DESCRIPTION', 'Script that attempts to apply any available configuration\nand database migration files');
+	define('SCRIPT_USAGE',       "    vendor/bin/stoic-migrate -up // Migrates the configuration and runs the `up` scripts for the db (default)\n    vendor/bin/stoic-migrate -down // Migrates the configuration and runs the `down` scripts for the db");
+
+	// Migration constants
+	class MStrings {
+		const MigFile = 'MIGRATIONS_TABLE';
+		const FindMigTable = 'find-migrations-table';
+		const InstallMigTable = 'install-migrations-table';
+		const SearchMigrations = 'search-migrations';
+		const InsertMigration = 'insert-migration';
+		const DropMigTable = 'drop-migrations-table';
+	}
+
+	$supportedDrivers = [
+		PdoDrivers::PDO_MSSQL => true,
+		PdoDrivers::PDO_MYSQL => true,
+		PdoDrivers::PDO_PGSQL => true,
+		PdoDrivers::PDO_SQLITE => true,
+		PdoDrivers::PDO_SQLSRV => true
+	];
+
+	PdoHelper::storeQueries(PdoDrivers::PDO_MSSQL, [
+		[MStrings::FindMigTable, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Migration'", null],
+		[MStrings::InstallMigTable, "IF NOT EXISTS (SELECT * FROM [INFORMATION_SCHEMA].[TABLES] WHERE [TABLE_NAME] = 'Migration') CREATE TABLE [Migration] ([ID] [int] IDENTITY(1,1) NOT NULL, [FileName] [nvarchar](256) NOT NULL, CONSTRAINT [PK_dbo.Migrations] PRIMARY KEY CLUSTERED ([ID] ASC) WITH (PAD_INDEX=OFF, STATISTICS_NORECOMPUTE=OFF, IGNORE_DUP_KEY=OFF, ALLOW_ROW_LOCKS=ON, ALLOW_PAGE_LOCKS=ON) ON [PRIMARY]) ON [PRIMARY]", null],
+		[MStrings::SearchMigrations, "SELECT * FROM [Migration]", null],
+		[MStrings::InsertMigration, "INSERT INTO [Migration] ([FileName]) VALUES (:fileName)", [':fileName' => \PDO::PARAM_STR]],
+		[MStrings::DropMigTable, "IF EXISTS (SELECT * FROM [INFORMATION_SCHEMA].[TABLES] WHERE [TABLE_NAME] = 'Migration') DROP TABLE [Migration]", null]
+	]);
+	PdoHelper::storeQueries(PdoDrivers::PDO_SQLSRV, [
+		[MStrings::FindMigTable, "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Migration'", null],
+		[MStrings::InstallMigTable, "IF NOT EXISTS (SELECT * FROM [INFORMATION_SCHEMA].[TABLES] WHERE [TABLE_NAME] = 'Migration') CREATE TABLE [Migration] ([ID] [int] IDENTITY(1,1) NOT NULL, [FileName] [nvarchar](256) NOT NULL, CONSTRAINT [PK_dbo.Migrations] PRIMARY KEY CLUSTERED ([ID] ASC) WITH (PAD_INDEX=OFF, STATISTICS_NORECOMPUTE=OFF, IGNORE_DUP_KEY=OFF, ALLOW_ROW_LOCKS=ON, ALLOW_PAGE_LOCKS=ON) ON [PRIMARY]) ON [PRIMARY]", null],
+		[MStrings::SearchMigrations, "SELECT * FROM [Migration]", null],
+		[MStrings::InsertMigration, "INSERT INTO [Migration] ([FileName]) VALUES (:fileName)", [':fileName' => \PDO::PARAM_STR]],
+		[MStrings::DropMigTable, "IF EXISTS (SELECT * FROM [INFORMATION_SCHEMA].[TABLES] WHERE [TABLE_NAME] = 'Migration') DROP TABLE [Migration]", null]
+	]);
+	PdoHelper::storeQueries(PdoDrivers::PDO_MYSQL, [
+		[MStrings::FindMigTable, "SHOW TABLES LIKE 'Migration'", null],
+		[MStrings::InstallMigTable, "CREATE TABLE IF NOT EXISTS `Migration` (`ID` INT UNSIGNED NOT NULL AUTO_INCREMENT, `FileName` VARCHAR(256) NOT NULL, PRIMARY KEY (`ID`))", null],
+		[MStrings::SearchMigrations, "SELECT * FROM `Migration`", null],
+		[MStrings::InsertMigration, "INSERT INTO `Migration` (`FileName`) VALUES (:fileName)", [':fileName' => \PDO::PARAM_STR]],
+		[MStrings::DropMigTable, "DROP TABLE IF EXISTS `Migration`", null]
+	]);
+	PdoHelper::storeQueries(PdoDrivers::PDO_PGSQL, [
+		[MStrings::FindMigTable, "SELECT * FROM information_schema.tables WHERE table_name = 'Migration'", null],
+		[MStrings::InstallMigTable, "CREATE TABLE IF NOT EXISTS Migration (ID SERIAL PRIMARY KEY, FileName VARCHAR(256) NOT NULL)", null],
+		[MStrings::SearchMigrations, "SELECT * FROM Migration", null],
+		[MStrings::InsertMigration, "INSERT INTO Migration (FileName) VALUES (:fileName)", [':fileName' => \PDO::PARAM_STR]],
+		[MStrings::DropMigTable, "DROP TABLE IF EXISTS Migration", null]
+	]);
+	PdoHelper::storeQueries(PdoDrivers::PDO_SQLITE, [
+		[MStrings::FindMigTable, "SELECT * FROM sqlite_master WHERE type = 'table' AND name LIKE 'Migration'", null],
+		[MStrings::InstallMigTable, "CREATE TABLE IF NOT EXISTS Migration (ID INTEGER AUTOINCREMENT, FileName VARCHAR(256) NOT NULL)", null],
+		[MStrings::SearchMigrations, "SELECT * FROM Migration", null],
+		[MStrings::InsertMigration, "INSERT INTO Migration (FileName) VALUES (:fileName)", [':fileName' => \PDO::PARAM_STR]],
+		[MStrings::DropMigTable, "DROP TABLE IF EXISTS Migration", null]
+	]);
+
+	$ch = new ConsoleHelper($argv);
+	$fh = new FileHelper(STOIC_COMPOSER_PARENT);
+
+	if ($ch->hasShortLongArg('h', 'help', true)) {
+		$ch->putLine(SCRIPT_NAME);
+		$ch->putLine(SCRIPT_DESCRIPTION);
+		$ch->putLine();
+		$ch->putLine(SCRIPT_USAGE);
+		$ch->putLine();
+
+		exit;
+	}
+
+	if (!$fh->fileExists(StoicStrings::SETTINGS_FILE_PATH)) {
+		fwrite(STDERR, "You must initialize your application:" . PHP_EOL . PHP_EOL . "    vendor/bin/stoic-create" . PHP_EOL);
+
+		die(1);
+	}
+
+	$settings = new ConfigContainer($fh->getContents(StoicStrings::SETTINGS_FILE_PATH));
+
+	$ch->putLine(SCRIPT_NAME);
+	$ch->putLine();
+	$ch->put("Performing configuration migration.. ");
+
+	$cfgHelper = new Migrator($fh->pathJoin($settings->get(SettingsStrings::ASSETS_PATH), $settings->get(SettingsStrings::MIGRATE_CFG_PATH)));
+	$cfgHelper->migrate();
+
+	$ch->putLine("DONE");
+	$ch->putLine();
+
+	if (!$settings->has(SettingsStrings::DB_DSN)) {
+		fwrite(STDERR, "You cannot migrate a database without it being configured, try running:" . PHP_EOL . PHP_EOL . "    vendor/bin/stoic-configure" . PHP_EOL);
+
+		die(1);
+	}
+
+	$filePath = null;
+	$isDropping = false;
+	$user = $settings->get(SettingsStrings::DB_USER, null);
+	$pass = $settings->get(SettingsStrings::DB_PASS, null);
+	$dsn = $settings->get(SettingsStrings::DB_DSN);
+	$db = new PdoHelper($settings->get(SettingsStrings::DB_DSN), (empty($user) || $user == '<changeme>') ? null : $user, (empty($pass) || $pass == '<changeme>') ? null : $pass);
+
+	if (!$db->isActive() || array_key_exists($db->getDriver()->getValue(), $supportedDrivers) === false) {
+		fwrite(STDERR, "Database migration only supports MSSQL, MySQL, PgSQL, SQLite, and SQL Server" . PHP_EOL);
+
+		die(1);
+	}
+
+	if ($ch->hasShortLongArg('d', 'drop', true)) {
+		$isDropping = true;
+		$filePath = $fh->pathJoin($settings->get(SettingsStrings::ASSETS_PATH), $settings->get(SettingsStrings::MIGRATE_DB_PATH), 'drop');
+	} else {
+		$filePath = $fh->pathJoin($settings->get(SettingsStrings::ASSETS_PATH), $settings->get(SettingsStrings::MIGRATE_DB_PATH), 'up');
+	}
+
+	$files = [];
+	$runScripts = [];
+	$tFiles = $fh->getFolderFiles($filePath);
+
+	if ($tFiles === null || count($tFiles) < 1) {
+		$ch->putLine("No files found to run against database");
+		$ch->putLine();
+		$ch->putLine("Stoic migration complete.");
+
+		exit;
+	}
+
+	$ch->put("Gathering SQL migration files.. ");
+
+	foreach (array_values($tFiles) as $f) {
+		if (strtolower(substr($f, -4)) == '.sql') {
+			$files[] = $f;
+		}
+	}
+
+	if ($isDropping) {
+		rsort($files);
+		array_push($files, MStrings::MigFile);
+	} else {
+		sort($files);
+		array_unshift($files, MStrings::MigFile);
+	}
+
+	$ch->putLine("DONE");
+	$ch->putLine();
+
+	$ch->putLine("Preparing to " . (($isDropping) ? 'drop' : 'migrate') . " database.. ");
+	$ch->putLine();
+
+	if (!$isDropping) {
+		$migTable = $db->queryStored(MStrings::FindMigTable);
+
+		if ($migTable !== false && $migTable->fetch() !== false) {
+			$query = $db->queryStored(MStrings::SearchMigrations);
+
+			if ($query !== false) {
+				while ($row = $query->fetch()) {
+					$runScripts[$row['FileName']] = true;
+				}
+			}
+		}
+	}
+
+	if (count($files) < 2) {
+		$ch->putLine("No migration files to run against database");
+	} else {
+		foreach (array_values($files) as $f) {
+			$fileName = $f;
+
+			if (stripos($fileName, '/') !== false) {
+				$fileName = substr($fileName, strrpos($fileName, '/') + 1);
+			}
+
+			$ch->put("Executing " . (($isDropping) ? 'drop' : 'migration') . " file '{$fileName}'.. ");
+
+			if (array_key_exists($fileName, $runScripts) !== false) {
+				$ch->putLine("SKIPPING (already run)");
+
+				continue;
+			}
+
+			if ($f == MStrings::MigFile) {
+				try {
+					$db->queryStored(($isDropping) ? MStrings::DropMigTable : MStrings::InstallMigTable);
+
+					if (!$isDropping) {
+						$db->prepareStored(MStrings::InsertMigration, [':fileName' => MStrings::MigFile])->execute();
+					}
+				} catch (\PDOException $ex) {
+					$ch->putLine("ERROR ([{$ex->getCode()}] {$ex->getMessage()})");
+
+					continue;
+				} catch (\Exception $ex) {
+					$ch->putLine("ERROR ({$ex->getMessage()})");
+
+					continue;
+				}
+			} else {
+				$sql = $fh->getContents($f);
+
+				if (!empty($sql)) {
+					try {
+						$db->query($sql);
+
+						$db->prepareStored(MStrings::InsertMigration, [':fileName' => $fileName])->execute();
+
+						if (count($db->getErrors()) > 0) {
+							foreach (array_values($db->getErrors()) as $err) {
+								$ch->putLine(json_encode($err));
+							}
+						}
+					} catch (\PDOException $ex) {
+						$ch->putLine("ERROR ([{$ex->getCode()}] {$ex->getMessage()})");
+
+						continue;
+					} catch (\Exception $ex) {
+						$ch->putLine("ERROR ({$ex->getMessage()})");
+
+						continue;
+					}
+				}
+			}
+
+			$ch->putLine("DONE");
+		}
+	}
+
+	$ch->putLine();
+	$ch->putLine("Completed database migration");
+	$ch->putLine();
+	$ch->putLine("Stoic migration complete.");

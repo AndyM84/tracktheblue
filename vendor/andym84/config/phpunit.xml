@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.3/phpunit.xsd" bootstrap="Tests/bootstrap.php" colors="false" stopOnError="false" stopOnFailure="false" stopOnIncomplete="false" stopOnSkipped="false" stopOnRisky="false">
+  <coverage includeUncoveredFiles="true" processUncoveredFiles="true">
+    <include>
+      <directory suffix=".php">./Config</directory>
+    </include>
+    <exclude>
+      <directory suffix=".php">./Tests/</directory>
+    </exclude>
+    <report>
+      <clover outputFile="coverage/phpunit.xml"/>
+      <html outputDirectory="coverage/"/>
+    </report>
+  </coverage>
+  <php>
+    <ini name="error_reporting" value="-1"/>
+  </php>
+  <testsuites>
+    <testsuite name="Core">
+      <directory suffix="Test.php">./Tests/Config</directory>
+    </testsuite>
+  </testsuites>
+  <logging>
+    <junit outputFile="reports/phpunit.xml"/>
+  </logging>
+</phpunit>

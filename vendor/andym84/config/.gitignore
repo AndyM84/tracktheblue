@@ -1,0 +1,11 @@
+.vs/
+*.phpproj
+*.sln
+composer.lock
+vendor/
+*.tmppica
+reports/
+coverage
+test.php
+*.zip
+/siteSettings.json

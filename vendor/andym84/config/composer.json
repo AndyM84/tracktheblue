@@ -1,0 +1,31 @@
+{
+	"name": "andym84/config",
+	"type": "library",
+	"description": "Configuration Management",
+	"keywords": ["config", "configuration", "automation"],
+	"version": "1.0.1",
+	"homepage": "https://github.com/AndyM84/config-migration",
+	"license": "MIT",
+	"authors": [
+		{
+			"name": "Andrew Male",
+			"homepage": "https://andymale.com/",
+			"role": "Developer"
+		}
+	],
+	"autoload": {
+		"psr-0": {
+			"AndyM84\\Config\\": "./Config"
+		},
+		"psr-4": {
+			"AndyM84\\Config\\": "./Config"
+		},
+		"exclude-from-classmap": ["/Tests/"]
+	},
+	"require": {
+		"php": ">=7.4"
+	},
+	"require-dev": {
+		"phpunit/phpunit": "^9"
+	}
+}

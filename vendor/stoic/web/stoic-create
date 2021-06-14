@@ -1,0 +1,141 @@
+#!/usr/bin/env php
+<?php
+
+	if (version_compare('7.2.0', PHP_VERSION, '>')) {
+		fwrite(STDERR, sprintf("Stoic is only supported on versions of PHP 7.2 or newer." . PHP_EOL . "You are using PHP %s (%s)" . PHP_EOL, PHP_VERSION, PHP_BINARY));
+
+		die(1);
+	}
+
+	if (!ini_get('date.timezone')) {
+		ini_set('date.timezone', 'UTC');
+	}
+
+	foreach (['../../' => '../../', '../vendor/' => '../', 'vendor/' => './'] as $file => $relPath) {
+		$path = "{$file}autoload.php";
+
+		if (file_exists($path)) {
+			define('STOIC_COMPOSER_INSTALL', $path);
+			define('STOIC_COMPOSER_PARENT', $relPath);
+
+			break;
+		}
+	}
+
+	if (!defined('STOIC_COMPOSER_INSTALL')) {
+		fwrite(STDERR, "You need to set up the project dependencies using Composer:" . PHP_EOL . PHP_EOL . "    composer install" . PHP_EOL);
+
+		die(1);
+	}
+
+	require(STOIC_COMPOSER_INSTALL);
+
+	use AndyM84\Config\ConfigContainer;
+	use AndyM84\Config\FieldTypes;
+	use Stoic\Utilities\FileHelper;
+	use Stoic\Web\Resources\SettingsStrings;
+
+	$settings = new ConfigContainer();
+	$fh = new FileHelper(STOIC_COMPOSER_PARENT);
+
+	if ($fh->fileExists(Stoic\Web\Resources\StoicStrings::SETTINGS_FILE_PATH)) {
+		$settings = new ConfigContainer($fh->getContents(Stoic\Web\Resources\StoicStrings::SETTINGS_FILE_PATH));
+	} else {
+		$cfgContents = '';
+		$required = [
+			'configVersion'                    => ['int', 1],
+			SettingsStrings::ASSETS_PATH       => ['str', '~/assets'],
+			SettingsStrings::CLASSES_EXTENSION => ['str', '.cls.php'],
+			SettingsStrings::CLASSES_PATH      => ['str', 'classes'],
+			SettingsStrings::DB_DSN            => ['str', 'sqlite::memory:'],
+			SettingsStrings::DB_PASS           => ['str', '<changeme>'],
+			SettingsStrings::DB_USER           => ['str', '<changeme>'],
+			SettingsStrings::INCLUDE_PATH      => ['str', '~/inc'],
+			SettingsStrings::MIGRATE_CFG_PATH  => ['str', 'migrations/cfg'],
+			SettingsStrings::MIGRATE_DB_PATH   => ['str', 'migrations/db'],
+			SettingsStrings::REPOS_EXTENSION   => ['str', '.rpo.php'],
+			SettingsStrings::REPOS_PATH        => ['str', 'repositories'],
+			SettingsStrings::UTILITIES_EXT     => ['str', '.utl.php'],
+			SettingsStrings::UTILITIES_PATH    => ['str', 'utilities']
+		];
+	
+		foreach ($required as $key => $data) {
+			if (!$settings->has($key)) {
+				$settings->set($key, $data[1], FieldTypes::fromString($data[0])->getValue());
+			}
+
+			if ($key != 'configVersion') {
+				$cfgContents .= "{$key}[{$data[0]}] + {$data[1]}" . PHP_EOL;
+			}
+		}
+		
+		$assetsPath = $settings->get(SettingsStrings::ASSETS_PATH, '~/assets');
+		$fh->makeFolder($fh->pathJoin($assetsPath, $settings->get(SettingsStrings::MIGRATE_CFG_PATH, 'migrations/cfg')), 0777, true);
+		$fh->makeFolder($fh->pathJoin($assetsPath, $settings->get(SettingsStrings::MIGRATE_DB_PATH, 'migrations/db'), 'drop'), 0777, true);
+		$fh->makeFolder($fh->pathJoin($assetsPath, $settings->get(SettingsStrings::MIGRATE_DB_PATH, 'migrations/db'), 'up'), 0777, true);
+	
+		$fh->putContents($fh->pathJoin('~/assets/migrations/cfg', '0-1.cfg'), $cfgContents);
+		$fh->putContents(Stoic\Web\Resources\StoicStrings::SETTINGS_FILE_PATH, json_encode($settings, JSON_PRETTY_PRINT));
+	}
+
+	$incPath = $settings->get(SettingsStrings::INCLUDE_PATH, '~/inc');
+
+	$tplPath = $fh->pathJoin('~/tpl', 'index');
+	$clsPath = $fh->pathJoin($incPath, $settings->get(SettingsStrings::CLASSES_PATH, 'classes'));
+	$rpoPath = $fh->pathJoin($incPath, $settings->get(SettingsStrings::REPOS_PATH, 'repositories'));
+	$utlPath = $fh->pathJoin($incPath, $settings->get(SettingsStrings::UTILITIES_PATH, 'utilities'));
+
+	$fh->makeFolder($tplPath, 0777, true);
+	$fh->makeFolder($incPath, 0777, true);
+	$fh->makeFolder($clsPath, 0777, true);
+	$fh->makeFolder($rpoPath, 0777, true);
+	$fh->makeFolder($utlPath, 0777, true);
+
+	$baseIndex = <<<'EOF'
+<?php
+
+	require('vendor/autoload.php');
+
+	use League\Plates\Engine;
+	use Stoic\Web\PageHelper;
+	use Stoic\Web\Stoic;
+
+	$stoic = Stoic::getInstance('./');
+
+	$page = PageHelper::getPage('index.php');
+	$page->setTitle('Stoic Framework v1');
+
+	$tpl = new Engine(null, 'tpl.php');
+	$tpl->addFolder('page', './tpl/index');
+
+	echo($tpl->render('page::index', ['page' => $page]));
+
+EOF;
+
+	$fh->putContents('~/index.php', $baseIndex);
+
+	$indexTpl = <<<'EOF'
+<!DOCTYPE html>
+
+<html>
+	<head>
+		<title><?=$page->getTitle()?></title>
+	</head>
+	<body>
+		<h1>Welcome, to Stoic Framework!</h1>
+	</body>
+</html>
+EOF;
+
+	$fh->putContents('~/tpl/index/index.tpl.php', $indexTpl);
+
+	$emptyIndex = <<<'EOF'
+<?php
+
+EOF;
+
+	$fh->putContents($fh->pathJoin($incPath, 'index.php'), $emptyIndex);
+	$fh->putContents($fh->pathJoin($clsPath, 'index.php'), $emptyIndex);
+	$fh->putContents($fh->pathJoin($rpoPath, 'index.php'), $emptyIndex);
+	$fh->putContents($fh->pathJoin($utlPath, 'index.php'), $emptyIndex);
+	$fh->putContents($fh->pathJoin($tplPath, 'index.php'), $emptyIndex);
