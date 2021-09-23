@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+<!-- Required meta tags -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+<!-- Bootstrap CSS -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+<link  rel="stylesheet"href=C:\Users\User\OneDrive\Desktop\tracking_the_blue\stylesheet.css>
+
+    <title>Tracking The Blue</title>
+
+  </head>
+  <body>
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+
+
+    <div class="d-flex justify-content-center" >
+          
+    <div >
+        <!--TODO: need to fix Jumbotron so that it fills the screen, jmbotron-fluid should
+        Have fixed this, but it fills it's parrent element, but it's parrent item doese not fill the screen-->
+        <div class="jumbotron jumbotron-fluid" style="background-color: blue; color: yellow;">
+        <div class="container">
+            <h1>Tracking the Blue</h1>
+        </div>
+
+        </div>
+    
+
+        <div >
+            <div id="Event_information">
+                <p>Event Information</p>
+            </div>
+        </div>
+        
+        <form  action="/action_page.php">
+        
+            <div class="form-group">
+                <label for="search_conducted">Was a search conducted? #</label>
+                <input type ="text" class="form-control" id="search_conducted">
+            </div>
+        
+            <div class="form-group">
+                <label for="reason_stop" >What was the givin reason for the stop?</label>
+                <input type ="reason_stop" class="form-control" id="reason_stop">
+            </div>
+
+            <div class="form-group">
+                <label for="reason_travel" >Why were you travling?</label>
+                <input type ="text" class="form-control" id="reason_travel">
+            </div>
+
+            <div class="form-group">
+                <label for="road_cond" >What where the travel condtions like?</label>
+                <input type ="text" class="form-control" id="road_cond">
+            </div>
+
+            <div class="form-group">
+                <label class="radio-inline" 
+                        data-toggle="collapse" data-target="#viedo_link"
+                        aria-expanded="true" aria-controls="video_link">
+                    <input type="radio" name="video" class="radio-inline" 
+                    data-toggle="collapse" data-target="#viedo_link"
+                    aria-expanded="true" aria-controls="video_link">Yes</label>
+                <label class="radio_inline"><input type="radio" name="video">No</label>
+            </div>
+
+            <!--ToDo:Add JS link to make this collase when no is selected above-->
+            <div class="form-group">
+                <label for="video_link">Link to the video</label>
+                <input type="text" class="form-control" id="road_con">
+            </div>
+            
+            
+            
+
+        
+        </form>
+        <div class="form-group d-flex justify-content-center">
+                
+            <button type="submit" class="btn btn-default">submit</button>
+        </div>
+
+        </div>
+    </div>    
+    </body>
+</html>
